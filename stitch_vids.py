@@ -5,6 +5,7 @@ import tempfile
 import shlex
 import subprocess
 import os
+import time
 import asyncio
 
 
@@ -73,7 +74,8 @@ async def _run(cmd):
 async def stitch(lst, output):
     files = []
     cmds = []
-    temp_files = []
+    temp_files = set()
+    t = time.time()
     try:
         for fl, ss, to in lst:
             fname = str(fl)
@@ -82,15 +84,15 @@ async def stitch(lst, output):
                 continue
             fd, tmp = tempfile.mkstemp(".mp4", prefix="stitcher-", dir="/tmp")
             os.close(fd)
-            temp_files.append(tmp)
+            temp_files.add(tmp)
             # tmp = "%s-%s" % (prefix, fl.name)
             files.append(tmp)
-            cmd = f"ffmpeg -y -i {fname}"
+            cmd = "ffmpeg -y -i {}".format(shlex.quote(fname))
             if ss > 0:
                 cmd += f" -ss {ss}"
             if to > 0:
                 cmd += f" -to {to}"
-            cmd += f" -codec copy {tmp}"
+            cmd += " -codec copy {}".format(shlex.quote(tmp))
             cmds.append(cmd)
 
         results = await asyncio.gather(*[_run(cmd) for cmd in cmds])
@@ -101,22 +103,26 @@ async def stitch(lst, output):
                                                 info[1], info[2])
 
         if len(files) == 1:
-            return files[0] ## XXX
+            os.rename(files[0], output)
+            temp_files.remove(files[0])
+            return output
 
         fd, concatsf = tempfile.mkstemp(".txt", prefix="stitcher-conc-",
                                         dir="/tmp")
-        temp_files.append(concatsf)
+        temp_files.add(concatsf)
         with os.fdopen(fd, "w") as fp:
             for fn in files:
                 fp.write("file '%s'\n" % (fn,))
         # safe 0: https://ffmpeg.org/ffmpeg-all.html#Options-37
-        concat_cmd = f"ffmpeg -y -safe 0 -f concat -i {concatsf} -codec copy {output}"
+        concat_cmd = "ffmpeg -y -safe 0 -f concat -i {} -codec copy {}".format(
+            shlex.quote(concatsf), shlex.quote(output))
         code, out, err = await _run(concat_cmd)
         return output
     finally:
         ## Cleanup temp files:
         for f in temp_files:
             os.unlink(f)
+        print(f"Stitching finished in {time.time()-t} seconds")
 
 
 def write_stdout(fn):
