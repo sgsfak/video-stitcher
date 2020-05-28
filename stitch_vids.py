@@ -5,6 +5,7 @@ import tempfile
 import shlex
 import subprocess
 import os
+import asyncio
 
 
 def test_fns():
@@ -61,44 +62,61 @@ def locate(ts, files, period_mins=5):
         ret.append((fname, ss, to))
     return ret
 
+async def _run(cmd):
+    proc = await asyncio.create_subprocess_shell(cmd,
+                                                 stdout=asyncio.subprocess.PIPE,
+                                                 stderr=asyncio.subprocess.PIPE)
+    out, err = await proc.communicate()
+    return (proc.returncode, out.decode('utf-8'), err.decode('utf-8'))
 
-def stitch(lst, output):
+
+async def stitch(lst, output):
     files = []
     cmds = []
-    for fl, ss, to in lst:
-        fname = str(fl)
-        if ss == 0 and to == 0:
-            files.append(fname)
-            continue
-        fd, tmp = tempfile.mkstemp(".mp4", prefix="stitcher-", dir="/tmp")
-        os.close(fd)
-        # tmp = "%s-%s" % (prefix, fl.name)
-        files.append(tmp)
-        cmd = "ffmpeg -y -i %s" % (fname,)
-        if ss > 0:
-            cmd += " -ss %d" % (ss,)
-        if to > 0:
-            cmd += " -to %d" % (to,)
-        cmd += " -codec copy %s" % (tmp,)
-        cmds.append(shlex.split(cmd))
-    for args in cmds:
-        # Wait for command to complete
-        # If the return code was not zero it raises CalledProcessError.
-        subprocess.check_call(args, shell=False)
+    temp_files = []
+    try:
+        for fl, ss, to in lst:
+            fname = str(fl)
+            if ss == 0 and to == 0:
+                files.append(fname)
+                continue
+            fd, tmp = tempfile.mkstemp(".mp4", prefix="stitcher-", dir="/tmp")
+            os.close(fd)
+            temp_files.append(tmp)
+            # tmp = "%s-%s" % (prefix, fl.name)
+            files.append(tmp)
+            cmd = f"ffmpeg -y -i {fname}"
+            if ss > 0:
+                cmd += f" -ss {ss}"
+            if to > 0:
+                cmd += f" -to {to}"
+            cmd += f" -codec copy {tmp}"
+            cmds.append(cmd)
 
-    if len(files) == 1:
-        return files[0]
+        results = await asyncio.gather(*[_run(cmd) for cmd in cmds])
+        first_failed = next(((c, r) for c, r in zip(cmds, results) if r[0]!=0), None)
+        if first_failed is not None:
+            failed_cmd, info = first_failed
+            raise subprocess.CalledProcessError(info[0], failed_cmd, 
+                                                info[1], info[2])
 
-    fd, concatsf = tempfile.mkstemp(".txt", prefix="stitcher-conc-",
-                                    dir="/tmp")
-    with os.fdopen(fd, "w") as fp:
-        for fn in files:
-            fp.write("file '%s'\n" % (fn,))
-    # safe 0: https://ffmpeg.org/ffmpeg-all.html#Options-37
-    concat_cmd = ("ffmpeg -y -safe 0 -f concat -i {}"
-                  " -codec copy {}").format(concatsf, output)
-    subprocess.check_call(shlex.split(concat_cmd), shell=False)
-    return output
+        if len(files) == 1:
+            return files[0] ## XXX
+
+        fd, concatsf = tempfile.mkstemp(".txt", prefix="stitcher-conc-",
+                                        dir="/tmp")
+        temp_files.append(concatsf)
+        with os.fdopen(fd, "w") as fp:
+            for fn in files:
+                fp.write("file '%s'\n" % (fn,))
+        # safe 0: https://ffmpeg.org/ffmpeg-all.html#Options-37
+        concat_cmd = f"ffmpeg -y -safe 0 -f concat -i {concatsf} -codec copy {output}"
+        code, out, err = await _run(concat_cmd)
+        return output
+    finally:
+        ## Cleanup temp files:
+        for f in temp_files:
+            os.unlink(f)
 
 
 def write_stdout(fn):
@@ -113,5 +131,5 @@ if __name__ == "__main__":
     files = read_vid_fns(dir)
     ts = 1589833700.0
     lst = locate(ts, files, period_mins=2)
-    outfn = stitch(lst)
+    outfn = asyncio.get_event_loop().run_until_complete(stitch(lst, "/tmp/test.mp4"))
     print("Out mp4 written in %s" % outfn)
