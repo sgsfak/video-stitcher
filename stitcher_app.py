@@ -2,6 +2,10 @@ from sanic import Sanic
 from sanic.response import json, text
 from stitch_vids import stitch, read_vid_fns, locate
 import pathlib
+import tempfile
+import os
+
+VID_SEGMENT_DIR = '/home/mped/ubuntu_dev/xvlepsis_streaming/ffmpeg_save_segments'
 
 app = Sanic(name="Video Stither")
 
@@ -14,10 +18,12 @@ def test(request, ts):
 @app.route('/stitcher/<ts:int>')
 def server_stitch(ts):
     ts = int(ts/1000)  # make it seconds
-    dir = '/home/mped/ubuntu_dev/xvlepsis_streaming/ffmpeg_save_segments'
-    files = read_vid_fns(dir)
+    files = read_vid_fns(VID_SEGMENT_DIR)
     lst = locate(ts, files, period_mins=2)
-    outfn = stitch(lst)
+    ## Create the output file:
+    fd, outfn = tempfile.mkstemp(".mp4", prefix="stitcher-out-", dir="/tmp")
+    os.close(fd)
+    stitch(lst, outfn)
     p = pathlib.Path(outfn)
     print("MP4 to send " + outfn)
     return static_file(p.name, root=p.parent)

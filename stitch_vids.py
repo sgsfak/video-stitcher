@@ -62,7 +62,7 @@ def locate(ts, files, period_mins=5):
     return ret
 
 
-def stitch(lst):
+def stitch(lst, output):
     files = []
     cmds = []
     for fl, ss, to in lst:
@@ -94,8 +94,6 @@ def stitch(lst):
     with os.fdopen(fd, "w") as fp:
         for fn in files:
             fp.write("file '%s'\n" % (fn,))
-    fd, output = tempfile.mkstemp(".mp4", prefix="stitcher-out-", dir="/tmp")
-    os.close(fd)
     # safe 0: https://ffmpeg.org/ffmpeg-all.html#Options-37
     concat_cmd = ("ffmpeg -y -safe 0 -f concat -i {}"
                   " -codec copy {}").format(concatsf, output)
