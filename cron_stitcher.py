@@ -37,6 +37,7 @@ async def locate_and_stitch(t:int, files, period_mins=2):
     p = pathlib.Path(f"{VID_OUT_DIR}/{t}.mp4")
     output = await stitch(lst, str(p))
     print(f"Wrote {output}!")
+    return output
 
 async def main():
     r = redis.Redis(decode_responses=True)
