@@ -1,0 +1,14 @@
+        location /stitched/ {
+             internal;
+             alias /var/www/html/stitcher/;
+        }
+
+
+        location /stitcher/ {
+             proxy_pass http://localhost:8686;
+             proxy_buffering off;
+             proxy_http_version 1.1;
+             chunked_transfer_encoding off;
+             proxy_cache off;
+             proxy_read_timeout 3600s;
+        }
