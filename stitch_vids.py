@@ -7,7 +7,7 @@ import subprocess
 import os
 import time
 import asyncio
-
+from shutil import copyfile
 
 def test_fns():
     lst = ["video-20200519-%02d%02d00.mp4" % (x, y)
@@ -103,8 +103,9 @@ async def stitch(lst, output):
                                                 info[1], info[2])
 
         if len(files) == 1:
-            os.rename(files[0], output)
-            temp_files.remove(files[0])
+            #os.rename(files[0], output)
+            #temp_files.remove(files[0])
+            copyfile(files[0], output)
             return output
 
         fd, concatsf = tempfile.mkstemp(".txt", prefix="stitcher-conc-",
