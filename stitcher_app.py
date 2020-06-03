@@ -11,13 +11,14 @@ import os
 import asyncio
 import uvloop
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+import reaper
 
 
 VID_SEGMENT_DIR = '/recorded_video'
 VID_OUT_DIR = '/var/www/html/stitcher'
 
 
-app = Sanic(name="Video Stither")
+app = Sanic(name="Video Stitcher")
 CORS(app)
 
 @app.route('/stitcher/<t:int>', methods=['GET', 'OPTIONS'])
@@ -44,4 +45,5 @@ async def server_stitch(request, t):
 
 if __name__ == "__main__":
     app.add_task(cron_stitcher.main())
+    app.add_task(reaper.reaper_coro(VID_OUT_DIR, 7*24))
     app.run(host='localhost', port=8686, debug=True)
