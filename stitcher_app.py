@@ -1,5 +1,5 @@
 from sanic import Sanic
-from sanic.response import json, text, empty
+from sanic.response import text, empty
 import sanic.response
 from sanic_cors import CORS
 from stitch_vids import stitch, read_vid_fns, locate
@@ -12,6 +12,8 @@ import asyncio
 import uvloop
 asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 import reaper
+import shlex
+import json
 
 
 VID_SEGMENT_DIR = '/recorded_video'
@@ -45,11 +47,27 @@ async def server_stitch(request, t):
 
 
 
+async def _probe(fname):
+    cmd = f"ffprobe -v quiet -print_format json -show_format -show_streams {shlex.quote(fname)}"
+    proc = await asyncio.create_subprocess_shell(cmd,
+                                                 stdout=asyncio.subprocess.PIPE,
+                                                 stderr=asyncio.subprocess.PIPE)
+    out, err = await proc.communicate()
+    if proc.returncode == 0:
+        return json.loads(out)
+    return {}
+
+
+
 @app.route('/stitcher/info/<t:int>', methods=['GET', 'OPTIONS'])
-def server_stitch_info(request, t):
+async def server_stitch_info(request, t):
     fname = f"{t}.mp4"
     real_file = pathlib.Path(VID_OUT_DIR).joinpath(fname)
-    return json({'exists': real_file.exists()})
+    info = {'exists': False}
+    if real_file.exists():
+        info = await _probe(str(real_file))
+        info['exists'] = True
+    return sanic.response.json(info)
 
 
 
