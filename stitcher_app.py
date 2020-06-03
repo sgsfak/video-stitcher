@@ -43,6 +43,16 @@ async def server_stitch(request, t):
     print(f"MP4 to send {real_file} through {uri}" )
     return empty(headers={'x-accel-redirect': uri})
 
+
+
+@app.route('/stitcher/info/<t:int>', methods=['GET', 'OPTIONS'])
+def server_stitch_info(request, t):
+    fname = f"{t}.mp4"
+    real_file = pathlib.Path(VID_OUT_DIR).joinpath(fname)
+    return json({'exists': real_file.exists()})
+
+
+
 if __name__ == "__main__":
     app.add_task(cron_stitcher.main())
     app.add_task(reaper.reaper_coro(VID_OUT_DIR, 7*24))
