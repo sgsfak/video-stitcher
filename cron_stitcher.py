@@ -5,6 +5,7 @@ import pathlib
 from stitch_vids import stitch, read_vid_fns, locate
 import asyncio
 import json
+import subprocess
 
 STREAMS=['critical.apnea', 'critical.vomit', 'critical.fever', 
          'critical.heartrate', 'critical.febrileconvulsions']
@@ -19,10 +20,10 @@ async def wait_for_events(r, state=None, block=1000, count=20):
     new_state = state.copy()
     event_ids = set()
     for stream, key, evt in data:
-            t = int(evt['t'])
-            new_state[stream] = key
-            # ts = int(t/1000)  # make it seconds
-            event_ids.add(t)
+        t = int(evt['t'])
+        new_state[stream] = key
+        # ts = int(t/1000)  # make it seconds
+        event_ids.add(t)
     return (new_state, event_ids)
 
 
@@ -34,9 +35,13 @@ async def locate_and_stitch(t:int, files, period_mins=2):
     ts = int(t/1000)
     lst = locate(ts, files, period_mins=period_mins)
     p = pathlib.Path(f"{VID_OUT_DIR}/{t}.mp4")
-    output = await stitch(lst, str(p))
-    print(f"Wrote {output}!")
-    return output
+    try:
+        output = await stitch(lst, str(p))
+        print(f"Wrote {output}!")
+        return output
+    except subprocess.CalledProcessError as ex:
+        print("Stitching failed for", t, "stderr:", ex.stderr)
+        return None
 
 async def main():
     #r = redis.Redis(decode_responses=True)
